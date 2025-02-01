@@ -1366,6 +1366,7 @@ function GitStatus:_git_create_commit(message, args)
   local signature = self._git.signature
   local gpg_sign = args and vim.tbl_contains(args, "--gpg-sign")
   local verify = not (args and vim.tbl_contains(args, "--no-verify"))
+  local gpg_tty_sign = gpg_sign and os.getenv("GPG_TTY") ~= nil
 
   if not signature then
     notifier.error "Can not find git signature!"
@@ -1400,6 +1401,10 @@ function GitStatus:_git_create_commit(message, args)
       else
         -- create commit with gpg sign
         local conf = self:read_gpg_config()
+        -- insert mode will mess up with pinentry-curses
+        if gpg_tty_sign then
+          vim.cmd("stopinsert")
+        end
         result.commit_id, result.err, result.message =
           git_gpg.create_commit_gpg(self.repo, self.index, signature, prettified, conf)
       end
@@ -1407,6 +1412,10 @@ function GitStatus:_git_create_commit(message, args)
 
     -- callback func, called when finished
     function()
+      -- pinentry-curses will ruined the terminal screen, need a full redraw
+      if gpg_tty_sign then
+        vim.cmd("redraw")
+      end
       if result.commit_id then
         notifier.info(string.format("New %scommit %s", gpg_sign and "signed " or "", result.commit_id:tostring(8)))
         self:hide_input(false)
